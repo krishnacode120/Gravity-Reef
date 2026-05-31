@@ -1,0 +1,8 @@
+{
+  "name": "Gravity Reef",
+  "description": "A dark-aesthetic browser grid game with gravity physics and Othello-style capture mechanics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
