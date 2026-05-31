@@ -613,7 +613,7 @@ export default function GravityReef() {
   return (
     <div className={`flex flex-col md:flex-row ${t.bg} text-white min-h-screen font-sans selection:bg-slate-700 transition-colors duration-500`}>
       {/* Sidebar / Navbar */}
-      <aside className={`w-full md:w-72 ${t.sidebar} border-b md:border-b-0 md:border-r p-6 flex flex-col md:min-h-screen z-10 shadow-2xl transition-colors duration-500`}>
+      <aside className={`w-full md:w-72 ${t.sidebar} border-b md:border-b-0 md:border-r p-6 flex flex-col md:h-screen md:overflow-y-auto custom-scrollbar z-10 shadow-2xl transition-colors duration-500`}>
         <div className="flex items-center justify-between md:justify-start gap-4 mb-6 md:mb-12">
           <div className="flex items-center gap-3">
             <LayoutDashboard className={`w-8 h-8 ${theme === 'OBSIDIAN' ? 'text-cyan-400' : 'text-white'}`} />
