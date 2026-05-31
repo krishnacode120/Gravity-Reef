@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Lock, LayoutDashboard, RotateCcw, Crown, X, ArrowDownToLine, RefreshCcw, Palette, BookOpen, History, Undo2, Volume2, VolumeX } from 'lucide-react';
+import { Lock, LayoutDashboard, RotateCcw, Crown, X, ArrowDownToLine, RefreshCcw, Palette, BookOpen, History, Undo2, Volume2, VolumeX, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Player, CellState, GameMode, Difficulty, BoardLayout } from '../types';
 import { playClickSound, playCaptureSound, startBackgroundHum, playWinSound, setMute, getMute } from '../lib/audio';
@@ -259,6 +259,49 @@ function simulateMove(board: CellState[][], r: number, c: number, player: Player
   return { newBoard, captures: cellsToFlip.length };
 }
 
+type ViewportTier = 'mobile' | 'tablet' | 'desktop' | 'wide';
+
+function useViewportTier(): ViewportTier {
+  const [tier, setTier] = useState<ViewportTier>(() => {
+    if (typeof window === 'undefined') return 'desktop';
+    const w = window.innerWidth;
+    if (w < 768) return 'mobile';
+    if (w < 1024) return 'tablet';
+    if (w < 1536) return 'desktop';
+    return 'wide';
+  });
+
+  useEffect(() => {
+    const update = () => {
+      const w = window.innerWidth;
+      if (w < 768) setTier('mobile');
+      else if (w < 1024) setTier('tablet');
+      else if (w < 1536) setTier('desktop');
+      else setTier('wide');
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+    };
+  }, []);
+
+  return tier;
+}
+
+function useBodyScrollLock(locked: boolean) {
+  useEffect(() => {
+    if (!locked) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [locked]);
+}
+
 function DemoBoard() {
   const [step, setStep] = useState(0);
 
@@ -324,6 +367,8 @@ export default function GravityReef() {
   const [moveHistory, setMoveHistory] = useState<{player: Player, fromR: number, fromC: number, destR: number, destC: number, captures: number, boardSnapshot: CellState[][]}[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [muted, setMuted] = useState(getMute());
+  const [showMobileSettings, setShowMobileSettings] = useState(false);
+  const viewportTier = useViewportTier();
 
   const t = THEMES[theme];
   const P1_COLOR = t.p1;
@@ -332,6 +377,8 @@ export default function GravityReef() {
   const [showTutorial, setShowTutorial] = useState(() => {
     return localStorage.getItem('gravityReefTutorialSeen') !== 'true';
   });
+
+  useBodyScrollLock(showMobileSettings || showTutorial);
 
   const dismissTutorial = () => {
     setShowTutorial(false);
@@ -611,57 +658,74 @@ export default function GravityReef() {
   }, []);
 
   return (
-    <div className={`flex flex-col md:flex-row ${t.bg} text-white min-h-screen font-sans selection:bg-slate-700 transition-colors duration-500`}>
-      {/* Sidebar / Navbar */}
-      <aside className={`w-full md:w-72 ${t.sidebar} border-b md:border-b-0 md:border-r p-6 flex flex-col md:h-screen md:overflow-y-auto custom-scrollbar z-10 shadow-2xl transition-colors duration-500`}>
-        <div className="flex items-center justify-between md:justify-start gap-4 mb-6 md:mb-12">
-          <div className="flex items-center gap-3">
-            <LayoutDashboard className={`w-8 h-8 ${theme === 'OBSIDIAN' ? 'text-cyan-400' : 'text-white'}`} />
-            <h1 className="text-xl md:text-2xl font-bold tracking-widest uppercase">
-              Gravity
-              <br className="hidden md:block" />
-              Reef
-            </h1>
+    <div className={`flex flex-col ${t.bg} text-white h-dvh max-h-dvh overflow-hidden font-sans selection:bg-slate-700 transition-colors duration-500`}>
+      {/* Mobile Top Navigation Header */}
+      <header className={`md:hidden shrink-0 w-full ${t.sidebar} border-b px-3 py-2.5 sm:px-4 sm:py-3 landscape:py-2 flex items-center justify-between gap-2 z-20 shadow-md safe-area-x`}>
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 shrink">
+          <LayoutDashboard className={`w-5 h-5 sm:w-6 sm:h-6 shrink-0 ${theme === 'OBSIDIAN' ? 'text-cyan-400' : 'text-white'}`} />
+          <span className="hidden min-[380px]:inline text-xs sm:text-sm font-bold tracking-widest uppercase">Gravity Reef</span>
+          <span className="inline min-[380px]:hidden text-xs font-bold tracking-widest uppercase">Reef</span>
+        </div>
+
+        {/* Compact active status & score bar */}
+        <div className="flex items-center gap-2 sm:gap-3 bg-black/40 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-slate-800/80 min-w-0 shrink">
+          {winner ? (
+            <span className="text-[10px] font-black uppercase tracking-wider text-yellow-400 animate-pulse">
+              {winner === 'DRAW' ? 'Draw' : `${winner} Wins`}
+            </span>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] uppercase font-bold tracking-wider font-sans" style={{ color: currentPlayer === 'P1' ? P1_COLOR : P2_COLOR }}>
+                {currentPlayer === 'P1' ? 'P1' : 'P2'} Turn
+              </span>
+            </div>
+          )}
+          <span className="text-slate-600 text-xs">|</span>
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <span style={{ color: P1_COLOR }} className="font-bold">{p1Score}</span>
+            <span className="text-slate-600">:</span>
+            <span style={{ color: P2_COLOR }} className="font-bold">{p2Score}</span>
           </div>
-          <div className="flex items-center gap-2">
+        </div>
+
+        {/* Compact Right Header Actions */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {gameMode === 'PvP' && moveHistory.length > 0 && (
             <button
-              onClick={() => setShowTutorial(true)}
-              className="md:hidden p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-lg border border-slate-700"
-              aria-label="View tutorial"
+              onClick={handleUndo}
+              className="touch-target p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-lg border border-slate-700 flex items-center justify-center"
+              aria-label="Undo move"
             >
-              <BookOpen className="w-5 h-5" />
+              <Undo2 className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => setTheme(tm => tm === 'OBSIDIAN' ? 'HIGH_CONTRAST' : 'OBSIDIAN')}
-              className="md:hidden p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-lg border border-slate-700"
-              aria-label="Toggle theme"
-            >
-              <Palette className="w-5 h-5" />
-            </button>
-            <button
-              onClick={toggleMute}
-              className="md:hidden p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-lg border border-slate-700"
-              aria-label={muted ? "Unmute audio" : "Mute audio"}
-            >
-              {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-            </button>
-            <button
-              onClick={handleRestart}
-              className="md:hidden p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-lg border border-slate-700"
-              aria-label="Restart game"
-            >
-              <RotateCcw className="w-5 h-5" />
-            </button>
-            {gameMode === 'PvP' && moveHistory.length > 0 && (
-              <button
-                onClick={handleUndo}
-                className="md:hidden p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-lg border border-slate-700"
-                aria-label="Undo last move"
-              >
-                <Undo2 className="w-5 h-5" />
-              </button>
-            )}
-          </div>
+          )}
+          <button
+            onClick={toggleMute}
+            className="touch-target p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-lg border border-slate-700 flex items-center justify-center"
+            aria-label="Toggle sound"
+          >
+            {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={() => setShowMobileSettings(true)}
+            className="touch-target p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-lg border border-slate-700 flex items-center justify-center"
+            aria-label="Open settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col md:flex-row w-full">
+      {/* Sidebar / Navbar (Desktop & Tablet) */}
+      <aside className={`hidden md:flex md:w-64 lg:w-72 xl:w-80 shrink-0 ${t.sidebar} border-r p-4 lg:p-6 flex-col h-full overflow-y-auto custom-scrollbar z-10 shadow-2xl transition-colors duration-500`}>
+        <div className="flex items-center gap-3 mb-12">
+          <LayoutDashboard className={`w-8 h-8 ${theme === 'OBSIDIAN' ? 'text-cyan-400' : 'text-white'}`} />
+          <h1 className="text-2xl font-bold tracking-widest uppercase">
+            Gravity
+            <br />
+            Reef
+          </h1>
         </div>
 
         <div className="flex-1 flex flex-col gap-6 md:gap-10">
@@ -882,22 +946,22 @@ export default function GravityReef() {
         </button>
       </aside>
 
-      {/* Main Board Area */}
-      <main className="flex-1 flex items-center justify-center p-2 sm:p-4 md:p-8 overflow-hidden">
-        <div className={`relative p-1 sm:p-2 md:p-4 ${t.boardOuter} rounded-2xl shadow-2xl backdrop-blur-sm overflow-hidden transition-colors duration-500 w-[min(100vw-16px,65vh)] sm:w-[min(100vw-32px,70vh)] md:w-[min(80vw,80vh)] lg:w-[min(800px,80vh)] aspect-square flex flex-col justify-center`}>
+      {/* Main Board Area — board size follows available viewport via container queries */}
+      <main className="game-board-host flex-1 min-h-0 min-w-0 flex items-center justify-center p-2 sm:p-3 md:p-6 lg:p-8 xl:p-10 overflow-hidden safe-area-x">
+        <div className={`game-board-frame relative p-1 sm:p-2 md:p-3 lg:p-4 ${t.boardOuter} rounded-xl sm:rounded-2xl shadow-2xl backdrop-blur-sm overflow-hidden transition-colors duration-500 flex flex-col justify-center mx-auto`}>
           {winner && <ConfettiBurst winnerColor={winner === 'P1' ? P1_COLOR : winner === 'P2' ? P2_COLOR : '#ffffff'} />}
           {winner && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5 }}
-              className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-30 flex flex-col items-center justify-center p-6 text-center select-none"
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-30 flex flex-col items-center justify-center p-3 sm:p-6 text-center select-none overflow-y-auto"
             >
               <motion.div
                 initial={{ scale: 0.8, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
                 transition={{ type: 'spring', damping: 20, stiffness: 200, delay: 0.2 }}
-                className="max-w-md w-full bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.8)] space-y-6"
+                className="max-w-md w-full max-h-full bg-slate-900 border border-slate-800 p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.8)] space-y-4 sm:space-y-6 my-auto"
               >
                 <div className="flex justify-center">
                   <div className="p-4 rounded-full bg-slate-800 border border-slate-700">
@@ -943,7 +1007,7 @@ export default function GravityReef() {
             </motion.div>
           )}
           <motion.div 
-            className={`grid grid-cols-8 gap-0.5 sm:gap-1 lg:gap-1.5 p-1 ${t.boardInner} rounded-xl transition-colors duration-500 w-full h-full`}
+            className={`grid grid-cols-8 gap-0.5 sm:gap-1 md:gap-1 lg:gap-1.5 p-0.5 sm:p-1 ${t.boardInner} rounded-lg sm:rounded-xl transition-colors duration-500 w-full h-full`}
             animate={boardShake ? { x: [-3, 3, -3, 3, 0], y: [-3, 3, -2, 2, 0] } : { x: 0, y: 0 }}
             transition={{ duration: 0.3 }}
           >
@@ -1048,11 +1112,15 @@ export default function GravityReef() {
       <AnimatePresence>
         {showHistory && (
           <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
+            initial={viewportTier === 'mobile' ? { y: '100%' } : { x: '100%' }}
+            animate={viewportTier === 'mobile' ? { y: 0 } : { x: 0 }}
+            exit={viewportTier === 'mobile' ? { y: '100%' } : { x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed right-0 top-0 bottom-0 w-72 bg-slate-900/95 backdrop-blur-md border-l border-slate-700 z-40 flex flex-col shadow-2xl"
+            className={`fixed z-40 flex flex-col shadow-2xl bg-slate-900/95 backdrop-blur-md border-slate-700 ${
+              viewportTier === 'mobile'
+                ? 'inset-x-0 bottom-0 top-auto max-h-[70vh] rounded-t-2xl border-t safe-area-bottom'
+                : 'right-0 top-0 bottom-0 w-full max-w-sm sm:w-72 border-l'
+            }`}
           >
             <div className="flex items-center justify-between p-4 border-b border-slate-800">
               <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
@@ -1103,6 +1171,163 @@ export default function GravityReef() {
         )}
       </AnimatePresence>
 
+      {/* Mobile Settings Bottom Drawer */}
+      <AnimatePresence>
+        {showMobileSettings && (
+          <>
+            {/* Backdrop overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.6 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMobileSettings(false)}
+              className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-xs"
+            />
+            
+            {/* Slide up Drawer */}
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              className="fixed bottom-0 left-0 right-0 max-h-[min(85dvh,90%)] bg-[#0F1420] border-t border-slate-700/80 rounded-t-3xl z-50 p-4 sm:p-6 flex flex-col md:hidden overflow-y-auto custom-scrollbar shadow-[0_-10px_40px_rgba(0,0,0,0.5)] font-sans safe-area-bottom"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6">
+                <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-cyan-400" />
+                  Game Config
+                </h3>
+                <button
+                  onClick={() => setShowMobileSettings(false)}
+                  className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-full bg-slate-800 border border-slate-700/50"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-6 flex-1 pb-8">
+                {/* Board Layouts */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block">
+                    Board Layout
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5 bg-slate-900/60 p-1.5 rounded-xl shadow-inner border border-slate-800">
+                    {(['CLASSIC', 'CORNERS', 'DIAMOND', 'CROSS', 'RING', 'SCATTERED'] as BoardLayout[]).map((layout) => (
+                      <button
+                        key={layout}
+                        onClick={() => {
+                          setBoardLayout(layout);
+                          setShowMobileSettings(false);
+                        }}
+                        className={`text-[10px] font-bold py-2.5 px-1 rounded-lg transition-colors ${
+                          boardLayout === layout ? 'bg-slate-800 text-cyan-400 border border-cyan-500/30 shadow-md' : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                        }`}
+                      >
+                        {layout}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Opponent Selection */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block">
+                    Opponent Mode
+                  </label>
+                  <div className="flex bg-slate-900/60 p-1 rounded-xl shadow-inner border border-slate-800">
+                    <button
+                      onClick={() => setGameMode('PvP')}
+                      className={`flex-1 text-xs font-bold py-2.5 rounded-lg transition-colors ${
+                        gameMode === 'PvP' ? 'bg-slate-800 text-cyan-400 border border-cyan-500/30 shadow-md' : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                      }`}
+                    >
+                      Player vs Player
+                    </button>
+                    <button
+                      onClick={() => setGameMode('PvAI')}
+                      className={`flex-1 text-xs font-bold py-2.5 rounded-lg transition-colors ${
+                        gameMode === 'PvAI' ? 'bg-slate-800 text-cyan-400 border border-cyan-500/30 shadow-md' : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                      }`}
+                    >
+                      Player vs AI
+                    </button>
+                  </div>
+                </div>
+
+                {/* AI Difficulty Selection */}
+                {gameMode === 'PvAI' && (
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block">
+                      AI Difficulty
+                    </label>
+                    <div className="flex bg-slate-900/60 p-1 rounded-xl shadow-inner border border-slate-800">
+                      {(['EASY', 'MEDIUM', 'HARD'] as Difficulty[]).map((level) => (
+                        <button
+                          key={level}
+                          onClick={() => setDifficulty(level)}
+                          className={`flex-1 text-xs font-bold py-2.5 rounded-lg transition-colors ${
+                            difficulty === level ? 'bg-slate-800 text-cyan-400 border border-cyan-500/30 shadow-md' : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                          }`}
+                        >
+                          {level}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {moveHistory.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setShowHistory(true);
+                      setShowMobileSettings(false);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-900/60 hover:bg-slate-800 text-slate-200 transition-colors rounded-xl font-bold uppercase text-xs border border-slate-800"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    Move Log ({moveHistory.length})
+                  </button>
+                )}
+
+                {/* Other Actions */}
+                <div className="grid grid-cols-2 gap-2 pt-4 border-t border-slate-800">
+                  <button
+                    onClick={() => {
+                      handleRestart();
+                      setShowMobileSettings(false);
+                    }}
+                    className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-xl font-bold uppercase text-xs border border-slate-700"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reset
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowTutorial(true);
+                      setShowMobileSettings(false);
+                    }}
+                    className="flex items-center justify-center gap-2 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-xl font-bold uppercase text-xs border border-slate-700"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    Tutorial
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTheme(tm => tm === 'OBSIDIAN' ? 'HIGH_CONTRAST' : 'OBSIDIAN');
+                      setShowMobileSettings(false);
+                    }}
+                    className="col-span-2 flex items-center justify-center gap-2 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors rounded-xl font-bold uppercase text-xs border border-slate-700"
+                  >
+                    <Palette className="w-3.5 h-3.5" />
+                    {theme === 'OBSIDIAN' ? 'Contrast Theme' : 'Obsidian Theme'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Tutorial Overlay */}
       <AnimatePresence>
         {showTutorial && (
@@ -1110,13 +1335,13 @@ export default function GravityReef() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0F17]/90 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-[#0B0F17]/90 backdrop-blur-md safe-area-x"
           >
             <motion.div
               initial={{ y: 20, scale: 0.95 }}
               animate={{ y: 0, scale: 1 }}
               exit={{ y: 20, scale: 0.95 }}
-              className="bg-slate-900 border border-slate-700 p-6 md:p-8 max-w-lg w-full max-h-[95vh] flex flex-col rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] relative"
+              className="bg-slate-900 border border-slate-700 p-4 sm:p-6 md:p-8 max-w-lg w-full max-h-[min(95dvh,100%)] flex flex-col rounded-xl sm:rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden"
             >
               <button
                 onClick={dismissTutorial}
@@ -1193,6 +1418,7 @@ export default function GravityReef() {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }
